@@ -222,9 +222,9 @@ mixin ModalSheetRouteMixin<T> on ModalRoute<T> {
 
   /// The curve used for the transition animation.
   ///
-  /// In the middle of a dismiss gesture drag,
-  /// this returns [Curves.linear] to match the finger motion.
-  @nonVirtual
+  /// During a swipe-to-dismiss gesture (and while finishing a gesture-driven
+  /// dismissal after release), this returns [Curves.linear] to match the user's
+  /// finger motion and avoid curve changes mid-transition.
   @visibleForTesting
   Curve get effectiveCurve =>
       (navigator?.userGestureInProgress ?? false) || _isDismissingByGesture
@@ -551,10 +551,23 @@ class _SheetDismissibleState extends State<_SheetDismissible>
       _route.navigator!.pop();
       _isUserGestureInProgress = false;
       _transitionController.fling(
-        velocity: effectiveVelocity.abs() > widget.sensitivity.minFlingVelocityRatio
-            ? effectiveVelocity
-            : -1.0 * widget.sensitivity.minFlingVelocityRatio,
+        velocity:
+            effectiveVelocity.abs() > widget.sensitivity.minFlingVelocityRatio
+                ? effectiveVelocity
+                : -1.0 * widget.sensitivity.minFlingVelocityRatio,
       );
+
+      // Ensure the route returns to the default (non-linear) curve once the
+      // gesture-driven dismissal finishes.
+      late final AnimationStatusListener resetDismissingFlag;
+      resetDismissingFlag = (status) {
+        if (status == AnimationStatus.dismissed ||
+            status == AnimationStatus.completed) {
+          _route._isDismissingByGesture = false;
+          _transitionController.removeStatusListener(resetDismissingFlag);
+        }
+      };
+      _transitionController.addStatusListener(resetDismissingFlag);
     } else if (!_transitionController.isCompleted) {
       // The route won't be popped, so animate the transition
       // back to the origin.
