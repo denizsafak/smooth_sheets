@@ -218,15 +218,18 @@ mixin ModalSheetRouteMixin<T> on ModalRoute<T> {
   // marked as protected, allowing it to be used by SheetDismissible.
   AnimationController get _controller => controller!;
 
+  bool _isDismissingByGesture = false;
+
   /// The curve used for the transition animation.
   ///
   /// In the middle of a dismiss gesture drag,
   /// this returns [Curves.linear] to match the finger motion.
   @nonVirtual
   @visibleForTesting
-  Curve get effectiveCurve => (navigator?.userGestureInProgress ?? false)
-      ? Curves.linear
-      : transitionCurve;
+  Curve get effectiveCurve =>
+      (navigator?.userGestureInProgress ?? false) || _isDismissingByGesture
+          ? Curves.linear
+          : transitionCurve;
 
   Widget buildSheet(BuildContext context);
 
@@ -544,7 +547,14 @@ class _SheetDismissibleState extends State<_SheetDismissible>
     final didPop = invokePop && _canPopByGesture;
 
     if (didPop) {
+      _route._isDismissingByGesture = true;
       _route.navigator!.pop();
+      _isUserGestureInProgress = false;
+      _transitionController.fling(
+        velocity: effectiveVelocity.abs() > widget.sensitivity.minFlingVelocityRatio
+            ? effectiveVelocity
+            : -1.0 * widget.sensitivity.minFlingVelocityRatio,
+      );
     } else if (!_transitionController.isCompleted) {
       // The route won't be popped, so animate the transition
       // back to the origin.
